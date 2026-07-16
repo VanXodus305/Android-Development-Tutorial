@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Launch Emulator & Install App",
+      "type": "shell",
+      "command": "if ! adb devices | grep -q 'emulator'; then screen -d -m emulator -avd Pixel_10 -gpu host; echo 'Launching native macOS accelerated emulator...'; fi && adb wait-for-device && echo 'Device detected. Waiting for system boot to finish...' && while [ \"$(adb shell getprop sys.boot_completed | tr -d '\\r')\" != \"1\" ]; do sleep 1; done && echo 'Boot complete! Deploying Jetpack Compose App...' && ./gradlew installDebug",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    }
+  ]
+}
