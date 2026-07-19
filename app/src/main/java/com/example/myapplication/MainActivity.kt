@@ -9,54 +9,282 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myapplication.ui.theme.MyApplicationTheme
+import java.util.UUID
+
+enum class Priority(val label: String, val color: Color) {
+	HIGH("High", Color(0xFFE57373)),
+	MEDIUM("Medium", Color(0xFFFFB74D)),
+	LOW("Low", Color(0xFF81C784))
+}
+
+data class ToDoItem(
+	val id: String = UUID.randomUUID().toString(),
+	val title: String,
+	val priority: Priority,
+	var isCompleted: Boolean = false
+)
 
 class MainActivity : ComponentActivity() {
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 		enableEdgeToEdge()
 		setContent {
-			MyApplicationTheme {
-				// greeting("Android")
+			MaterialTheme {
+				Surface(
+					modifier = Modifier.fillMaxSize(),
+					color = MaterialTheme.colorScheme.background
+				) {
+					ToDoAppScreen()
+				}
+			}
+//			MyApplicationTheme {
+//				// greeting("Android")
+//
+//				MyAppNavigation()
+//
+//				// var count by remember { mutableStateOf(0) }
+//				// Column(
+//				//     modifier = Modifier.fillMaxSize(),
+//				//     verticalArrangement = Arrangement.Center,
+//				//     horizontalAlignment = Alignment.CenterHorizontally
+//				// ) {
+//				//     Text(
+//				//         text = count.toString(),
+//				//         color = Color.Blue,
+//				//         fontSize = 30.sp
+//				//     )
+//				//     Button(
+//				//         onClick = { count++ },
+//				//         modifier = Modifier.padding(top = 16.dp),
+//				//         colors = ButtonDefaults.buttonColors(containerColor = Color.Magenta)
+//				//     ) {
+//				//         Text(text = "Click Me")
+//				//     }
+//				// }
+//			}
+		}
+	}
+}
 
-				MyAppNavigation()
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ToDoAppScreen() {
+	val todoList = remember {
+		mutableStateListOf(
+			ToDoItem(
+				title = "Review Week 2 Activity Lifecycles",
+				priority = Priority.HIGH,
+				isCompleted = true
+			),
+			ToDoItem(title = "Fix VS Code Gradle compiler bugs", priority = Priority.HIGH),
+			ToDoItem(title = "Design Student UI using Material3 Cards", priority = Priority.MEDIUM),
+			ToDoItem(title = "Watch Type-Safe Navigation Crash Course", priority = Priority.LOW)
+		)
+	}
 
-				// var count by remember { mutableStateOf(0) }
-				// Column(
-				//     modifier = Modifier.fillMaxSize(),
-				//     verticalArrangement = Arrangement.Center,
-				//     horizontalAlignment = Alignment.CenterHorizontally
-				// ) {
-				//     Text(
-				//         text = count.toString(),
-				//         color = Color.Blue,
-				//         fontSize = 30.sp
-				//     )
-				//     Button(
-				//         onClick = { count++ },
-				//         modifier = Modifier.padding(top = 16.dp),
-				//         colors = ButtonDefaults.buttonColors(containerColor = Color.Magenta)
-				//     ) {
-				//         Text(text = "Click Me")
-				//     }
-				// }
+	var taskInput by rememberSaveable { mutableStateOf("") }
+	var selectedPriority by remember { mutableStateOf(Priority.MEDIUM) }
+	var dropdownExpanded by remember { mutableStateOf(false) }
+
+	Scaffold(
+		topBar = {
+			TopAppBar(
+				title = { Text("Task Tracker", fontWeight = FontWeight.Bold) },
+				colors = TopAppBarDefaults.topAppBarColors(
+					containerColor = MaterialTheme.colorScheme.primaryContainer,
+					titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+				)
+			)
+		}
+	) { innerPadding ->
+		Column(
+			modifier = Modifier
+				.padding(innerPadding)
+				.fillMaxSize()
+				.padding(16.dp)
+		) {
+			OutlinedTextField(
+				value = taskInput,
+				onValueChange = { taskInput = it },
+				label = { Text("What needs to be done?") },
+				modifier = Modifier.fillMaxWidth(),
+				singleLine = true
+			)
+
+			Spacer(modifier = Modifier.height(8.dp))
+
+			Row(
+				modifier = Modifier.fillMaxWidth(),
+				horizontalArrangement = Arrangement.SpaceBetween,
+				verticalAlignment = Alignment.CenterVertically
+			) {
+				Box {
+					Button(onClick = { dropdownExpanded = true }) {
+						Text("Priority: ${selectedPriority.label}")
+					}
+					DropdownMenu(
+						expanded = dropdownExpanded,
+						onDismissRequest = { dropdownExpanded = false }
+					) {
+						Priority.entries.forEach { priority ->
+							DropdownMenuItem(
+								text = { Text(priority.label) },
+								onClick = {
+									selectedPriority = priority
+									dropdownExpanded = false
+								}
+							)
+						}
+					}
+				}
+
+				Button(
+					onClick = {
+						if (taskInput.isNotBlank()) {
+							todoList.add(ToDoItem(title = taskInput.trim(), priority = selectedPriority))
+							taskInput = ""
+						}
+					},
+					colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+				) {
+					Text("Add Task")
+				}
+			}
+
+			Spacer(modifier = Modifier.height(16.dp))
+			Text(
+				"Your Tasks",
+				style = MaterialTheme.typography.titleMedium,
+				fontWeight = FontWeight.SemiBold
+			)
+			Spacer(modifier = Modifier.height(8.dp))
+
+			LazyColumn(
+				verticalArrangement = Arrangement.spacedBy(8.dp),
+				modifier = Modifier.fillMaxSize()
+			) {
+				items(todoList, key = { it.id }) { item ->
+					ToDoRowItem(
+						item = item,
+						onCheckedChange = { isChecked ->
+							// Find element and map mutations accurately
+							val index = todoList.indexOf(item)
+							if (index != -1) {
+								todoList[index] = item.copy(isCompleted = isChecked)
+							}
+						},
+						onDeleteClick = {
+							todoList.remove(item)
+						}
+					)
+				}
 			}
 		}
+	}
+}
+
+@Composable
+fun ToDoRowItem(
+	item: ToDoItem,
+	onCheckedChange: (Boolean) -> Unit,
+	onDeleteClick: () -> Unit
+) {
+	Card(
+		modifier = Modifier.fillMaxWidth(),
+		elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+		colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+	) {
+		Row(
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(12.dp),
+			verticalAlignment = Alignment.CenterVertically
+		) {
+			Box(
+				modifier = Modifier
+					.size(12.dp)
+					.background(item.priority.color, shape = RoundedCornerShape(6.dp))
+			)
+
+			Spacer(modifier = Modifier.width(12.dp))
+
+			Checkbox(
+				checked = item.isCompleted,
+				onCheckedChange = onCheckedChange
+			)
+
+			Text(
+				text = item.title,
+				style = MaterialTheme.typography.bodyLarge.copy(
+					textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+				),
+				color = if (item.isCompleted) Color.Gray else Color.Unspecified,
+				modifier = Modifier.weight(1f)
+			)
+
+			IconButton(onClick = onDeleteClick) {
+				Icon(
+					imageVector = Icons.Default.Delete,
+					contentDescription = "Remove Task item from data array",
+					tint = MaterialTheme.colorScheme.error
+				)
+			}
+		}
+	}
+}
+
+@Preview(showBackground = true)
+@Composable
+fun ToDoAppPreview() {
+	MaterialTheme {
+		ToDoAppScreen()
 	}
 }
 
@@ -109,10 +337,10 @@ fun Greeting(name: String) {
 	}
 }
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewGreeting() {
-	MyApplicationTheme {
-		Greeting("Android")
-	}
-}
+//@Preview(showBackground = true)
+//@Composable
+//fun PreviewGreeting() {
+//	MyApplicationTheme {
+//		Greeting("Android")
+//	}
+//}
