@@ -13,28 +13,26 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import androidx.navigation.NavHostController
-import java.lang.module.ModuleDescriptor
 
 @Composable
-fun screenA(navController: NavController) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .fillMaxSize() 
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "This is Screen A",
-            fontSize = 24.sp,
-            textAlign = TextAlign.Center
-        )
-        Button(
-            onClick = { navController.navigate(Routes.SCREEN_B + "?name=John") },
-            modifier = Modifier.padding(top = 16.dp)
-        ) {
-            Text(text = "Go to Screen B")
-        }
-    }
+fun ScreenA(navController: NavController) {
+	Column(
+		horizontalAlignment = Alignment.CenterHorizontally,
+		verticalArrangement = Arrangement.Center,
+		modifier = Modifier
+			.fillMaxSize()
+			.padding(16.dp)
+	) {
+		Text(
+			text = "This is Screen A",
+			fontSize = 24.sp,
+			textAlign = TextAlign.Center
+		)
+		Button(
+			onClick = { navController.navigate(Routes.SCREEN_B + "?name=John") },
+			modifier = Modifier.padding(top = 16.dp)
+		) {
+			Text(text = "Go to Screen B")
+		}
+	}
 }
