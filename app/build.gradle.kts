@@ -49,6 +49,7 @@ dependencies {
 	implementation(libs.androidx.lifecycle.runtime.ktx)
 	implementation(libs.androidx.material3)
 	implementation(libs.androidx.room.ktx)
+	implementation(libs.work.runtime.ktx)
 	testImplementation(libs.junit)
 	androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 	androidTestImplementation(libs.androidx.espresso.core)
@@ -61,4 +62,6 @@ dependencies {
 	implementation(libs.androidx.datastore.preferences)
 	implementation(libs.androidx.room.runtime)
 	ksp(libs.room.compiler)
+	implementation(libs.androidx.lifecycle.viewmodel.compose)
+	implementation(libs.androidx.lifecycle.runtime.compose)
 }
