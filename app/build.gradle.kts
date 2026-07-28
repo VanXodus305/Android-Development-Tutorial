@@ -1,13 +1,14 @@
 plugins {
 	alias(libs.plugins.android.application)
 	alias(libs.plugins.kotlin.compose)
+	alias(libs.plugins.kotlin.serialization)
 	id("com.google.devtools.ksp")
 }
 
 android {
 	namespace = "com.example.myapplication"
 	compileSdk {
-		version = release(36) {
+		version = release(37) {
 			minorApiLevel = 1
 		}
 	}
@@ -15,11 +16,15 @@ android {
 	defaultConfig {
 		applicationId = "com.example.myapplication"
 		minSdk = 24
-		targetSdk = 36
+		targetSdk = 37
 		versionCode = 1
 		versionName = "1.0"
 
 		testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+	}
+
+	buildFeatures {
+		viewBinding = true
 	}
 
 	buildTypes {
@@ -64,4 +69,18 @@ dependencies {
 	ksp(libs.room.compiler)
 	implementation(libs.androidx.lifecycle.viewmodel.compose)
 	implementation(libs.androidx.lifecycle.runtime.compose)
+
+	implementation(libs.retrofit)
+	implementation(libs.converter.gson)
+	implementation(libs.okhttp)
+
+	implementation(libs.kotlinx.coroutines.core)
+	implementation(libs.kotlinx.coroutines.android)
+
+	implementation(libs.kotlinx.serialization.json)
+	implementation(libs.kotlinx.serialization.converter)
+	implementation(libs.google.play.services.location)
+
+	implementation(libs.androidx.lifecycle.viewmodel.ktx)
+	implementation(libs.androidx.lifecycle.runtime.ktx.v220)
 }
