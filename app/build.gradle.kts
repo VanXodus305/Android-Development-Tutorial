@@ -80,7 +80,9 @@ dependencies {
 	implementation(libs.kotlinx.serialization.json)
 	implementation(libs.kotlinx.serialization.converter)
 	implementation(libs.google.play.services.location)
+	implementation(libs.androidx.media3.exoplayer)
+	implementation(libs.androidx.media3.ui)
+	implementation(libs.androidx.media3.datasource.okhttp)
 
 	implementation(libs.androidx.lifecycle.viewmodel.ktx)
-	implementation(libs.androidx.lifecycle.runtime.ktx.v220)
 }

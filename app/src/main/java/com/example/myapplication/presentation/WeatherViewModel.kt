@@ -1,6 +1,7 @@
 package com.example.myapplication.presentation
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
@@ -15,6 +16,7 @@ import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 class WeatherViewModel(application: Application) : AndroidViewModel(application) {
 	private val repository: WeatherRepository = WeatherRepositoryImpl()
@@ -48,18 +50,21 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 	}
 
 	fun onSearchQueryChange(query: String) {
+		Log.d("WeatherViewModel", "Search query changed: $query")
 		_state.value = _state.value.copy(searchQuery = query)
 		searchJob?.cancel()
 		if (query.length >= 2) {
 			_state.value = _state.value.copy(isSearching = true)
 			searchJob = viewModelScope.launch {
-				delay(500)
+				delay(500.milliseconds)
 				when (val result = repository.searchLocation(query)) {
 					is Resource.Success -> {
+						Log.d("WeatherViewModel", "Search success: ${result.data.size} results")
 						_state.value = _state.value.copy(searchResults = result.data, isSearching = false)
 					}
 
 					is Resource.Error -> {
+						Log.e("WeatherViewModel", "Search error: ${result.message}")
 						_state.value = _state.value.copy(isSearching = false)
 					}
 				}
@@ -88,6 +93,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 						isLoading = false,
 						locationName = name
 					)
+					fetchBackgroundVideo(result.data.condition)
 				}
 
 				is Resource.Error -> {
@@ -95,6 +101,20 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 						error = result.message,
 						isLoading = false
 					)
+				}
+			}
+		}
+	}
+
+	private fun fetchBackgroundVideo(condition: String) {
+		viewModelScope.launch {
+			when (val result = repository.fetchBackgroundVideo(condition)) {
+				is Resource.Success -> {
+					_state.value = _state.value.copy(backgroundVideoUrl = result.data)
+				}
+
+				is Resource.Error -> {
+					Log.e("WeatherViewModel", "Failed to fetch video: ${result.message}")
 				}
 			}
 		}

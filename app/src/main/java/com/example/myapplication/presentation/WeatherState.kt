@@ -10,5 +10,6 @@ data class WeatherState(
 	val searchQuery: String = "",
 	val searchResults: List<LocationInfo> = emptyList(),
 	val locationName: String = "Your Location",
-	val isSearching: Boolean = false
+	val isSearching: Boolean = false,
+	val backgroundVideoUrl: String? = null
 )

@@ -1,21 +1,24 @@
 package com.example.myapplication.presentation
 
+import android.annotation.SuppressLint
+import android.util.Log
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.EaseInOutSine
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,28 +61,53 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
+import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.ui.PlayerView
 import com.example.myapplication.domain.model.WeatherInfo
-import kotlin.math.sin
+import kotlinx.coroutines.delay
+import okhttp3.OkHttpClient
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
+import kotlin.time.Duration.Companion.milliseconds
 
+@UnstableApi
 @Composable
 fun WeatherScreen(viewModel: WeatherViewModel) {
 	val state by viewModel.state
@@ -89,7 +117,10 @@ fun WeatherScreen(viewModel: WeatherViewModel) {
 	}
 
 	Box(modifier = Modifier.fillMaxSize()) {
-		AnimatedBackground(isDay = state.weatherInfo?.isDay != false)
+		DynamicWeatherBackground(
+			isDay = state.weatherInfo?.isDay != false,
+			videoUrl = state.backgroundVideoUrl
+		)
 
 		Column(
 			modifier = Modifier
@@ -102,8 +133,6 @@ fun WeatherScreen(viewModel: WeatherViewModel) {
 			SearchBar(
 				query = state.searchQuery,
 				onQueryChange = viewModel::onSearchQueryChange,
-				searchResults = state.searchResults,
-				onLocationSelected = viewModel::onLocationSelected,
 				isSearching = state.isSearching
 			)
 
@@ -112,9 +141,9 @@ fun WeatherScreen(viewModel: WeatherViewModel) {
 			AnimatedContent(
 				targetState = state,
 				transitionSpec = {
-					fadeIn(animationSpec = tween(600)) togetherWith fadeOut(animationSpec = tween(600))
+					fadeIn(animationSpec = tween(800)) togetherWith fadeOut(animationSpec = tween(800))
 				},
-				label = "WeatherStateContent"
+				label = "MainContentTransition"
 			) { targetState ->
 				Box(modifier = Modifier.fillMaxSize()) {
 					when {
@@ -140,64 +169,208 @@ fun WeatherScreen(viewModel: WeatherViewModel) {
 				}
 			}
 		}
+
+		// Floating Search Results Dropdown (Improved Visibility and Interaction)
+		if (state.searchResults.isNotEmpty() || state.isSearching) {
+			Box(
+				modifier = Modifier
+					.fillMaxSize()
+					.background(Color.Black.copy(alpha = 0.4f))
+					.clickable { viewModel.onSearchQueryChange("") } // Click background to close
+					.zIndex(100f) // Extremely high zIndex
+			) {
+				Card(
+					modifier = Modifier
+						.fillMaxWidth()
+						.padding(top = 120.dp)
+						.padding(horizontal = 20.dp)
+						.clickable(enabled = false) { } // Consume clicks inside
+						.border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(24.dp)),
+					colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+					shape = RoundedCornerShape(24.dp),
+					elevation = CardDefaults.cardElevation(16.dp)
+				) {
+					if (state.isSearching && state.searchResults.isEmpty()) {
+						Box(
+							modifier = Modifier
+								.fillMaxWidth()
+								.padding(40.dp),
+							contentAlignment = Alignment.Center
+						) {
+							CircularProgressIndicator(color = Color.White)
+						}
+					} else {
+						LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+							items(state.searchResults) { location ->
+								ListItem(
+									headlineContent = {
+										Text(
+											location.name,
+											color = Color.White,
+											fontWeight = FontWeight.ExtraBold
+										)
+									},
+									supportingContent = {
+										Text(
+											"${location.region ?: ""}${if (location.region != null) ", " else ""}${location.country ?: ""}",
+											color = Color.White.copy(alpha = 0.7f),
+											fontSize = 14.sp
+										)
+									},
+									modifier = Modifier.clickable {
+										Log.d("WeatherScreen", "Selected location: ${location.name}")
+										viewModel.onLocationSelected(location)
+									},
+									colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+								)
+								HorizontalDivider(
+									modifier = Modifier.padding(horizontal = 16.dp),
+									color = Color.White.copy(alpha = 0.15f)
+								)
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
+@UnstableApi
 @Composable
-fun AnimatedBackground(isDay: Boolean) {
-	val infiniteTransition = rememberInfiniteTransition(label = "BackgroundTransition")
+fun DynamicWeatherBackground(isDay: Boolean, videoUrl: String?) {
+	val currentVideoUrl = remember(videoUrl) { videoUrl }
 
-	val phase by infiniteTransition.animateFloat(
-		initialValue = 0f,
-		targetValue = 2f * Math.PI.toFloat(),
-		animationSpec = infiniteRepeatable(
-			animation = tween(10000, easing = LinearEasing),
-			repeatMode = RepeatMode.Restart
-		),
-		label = "PhaseAnimation"
-	)
-
-	val color1 by animateColorAsState(
-		targetValue = if (isDay) Color(0xFF4facfe) else Color(0xFF0F2027),
-		animationSpec = tween(1000), label = "Color1"
-	)
-	val color2 by animateColorAsState(
-		targetValue = if (isDay) Color(0xFF00f2fe) else Color(0xFF2C5364),
-		animationSpec = tween(1000), label = "Color2"
-	)
-
-	Box(
-		modifier = Modifier
-			.fillMaxSize()
-			.background(Brush.verticalGradient(listOf(color1, color2)))
-	) {
-		Canvas(
+	Box(modifier = Modifier.fillMaxSize()) {
+		// High-Quality Vibrant Fallback Gradient
+		Box(
 			modifier = Modifier
 				.fillMaxSize()
-				.blur(80.dp)
+				.background(
+					Brush.verticalGradient(
+						if (isDay) listOf(Color(0xFF00C6FF), Color(0xFF0072FF))
+						else listOf(Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364))
+					)
+				)
+		)
+
+		if (currentVideoUrl != null) {
+			VideoBackground(videoUrl = currentVideoUrl)
+		}
+
+		val overlayOpacity by animateFloatAsState(
+			targetValue = if (isDay) 0.15f else 0.35f,
+			animationSpec = tween(1500), label = "OverlayOpacity"
+		)
+		Box(
+			modifier = Modifier
+				.fillMaxSize()
+				.background(Color.Black.copy(alpha = overlayOpacity))
+		)
+	}
+}
+
+@UnstableApi
+@Composable
+fun VideoBackground(videoUrl: String) {
+	val context = LocalContext.current
+	val lifecycleOwner = LocalLifecycleOwner.current
+	var isVideoReady by remember { mutableStateOf(false) }
+
+	val unsafeOkHttpClient = remember { createUnsafeOkHttpClient() }
+
+	val exoPlayer = remember {
+		ExoPlayer.Builder(context).build().apply {
+			repeatMode = Player.REPEAT_MODE_ALL
+			playWhenReady = true
+			addListener(object : Player.Listener {
+				override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+					Log.e("VideoBackground", "ExoPlayer Error: ${error.message} (URL: $videoUrl)", error)
+					isVideoReady = false
+				}
+
+				override fun onPlaybackStateChanged(state: Int) {
+					Log.d("VideoBackground", "ExoPlayer State: $state")
+					if (state == Player.STATE_READY) isVideoReady = true
+				}
+			})
+		}
+	}
+
+	LaunchedEffect(videoUrl) {
+		isVideoReady = false
+		val dataSourceFactory = OkHttpDataSource.Factory(unsafeOkHttpClient)
+			.setUserAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
+
+		val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+			.createMediaSource(MediaItem.fromUri(videoUrl.toUri()))
+
+		exoPlayer.setMediaSource(mediaSource)
+		exoPlayer.prepare()
+	}
+
+	DisposableEffect(lifecycleOwner) {
+		val observer = LifecycleEventObserver { _, event ->
+			when (event) {
+				Lifecycle.Event.ON_PAUSE -> exoPlayer.pause()
+				Lifecycle.Event.ON_RESUME -> exoPlayer.play()
+				else -> {}
+			}
+		}
+		lifecycleOwner.lifecycle.addObserver(observer)
+		onDispose {
+			lifecycleOwner.lifecycle.removeObserver(observer)
+			exoPlayer.release()
+		}
+	}
+
+	Box(modifier = Modifier.fillMaxSize()) {
+		AnimatedVisibility(
+			visible = isVideoReady,
+			enter = fadeIn(tween(1200)),
+			exit = fadeOut(tween(600))
 		) {
-			val width = size.width
-			val height = size.height
-
-			drawCircle(
-				color = color1.copy(alpha = 0.4f),
-				radius = width * 0.6f,
-				center = Offset(
-					x = width * (0.5f + 0.2f * sin(phase.toDouble()).toFloat()),
-					y = height * (0.2f + 0.1f * sin(phase.toDouble() + 1.0).toFloat())
-				)
-			)
-
-			drawCircle(
-				color = color2.copy(alpha = 0.3f),
-				radius = width * 0.8f,
-				center = Offset(
-					x = width * (0.3f + 0.15f * sin(phase.toDouble() * 0.7 + 2.0).toFloat()),
-					y = height * (0.7f + 0.2f * sin(phase.toDouble() * 0.8 + 3.0).toFloat())
-				)
+			AndroidView(
+				factory = {
+					PlayerView(context).apply {
+						player = exoPlayer
+						useController = false
+						setBackgroundColor(android.graphics.Color.TRANSPARENT)
+						setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+						resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+						layoutParams = FrameLayout.LayoutParams(
+							ViewGroup.LayoutParams.MATCH_PARENT,
+							ViewGroup.LayoutParams.MATCH_PARENT
+						)
+					}
+				},
+				modifier = Modifier.fillMaxSize()
 			)
 		}
 	}
+}
+
+fun createUnsafeOkHttpClient(): OkHttpClient {
+	val trustAllCerts = arrayOf<TrustManager>(
+		@SuppressLint("CustomX509TrustManager")
+		object : X509TrustManager {
+			@SuppressLint("TrustAllX509TrustManager")
+			override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
+			}
+
+			@SuppressLint("TrustAllX509TrustManager")
+			override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+			}
+
+			override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+		}
+	)
+	val sslContext = SSLContext.getInstance("SSL")
+	sslContext.init(null, trustAllCerts, SecureRandom())
+	return OkHttpClient.Builder()
+		.sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
+		.hostnameVerifier { _, _ -> true }
+		.build()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -205,102 +378,55 @@ fun AnimatedBackground(isDay: Boolean) {
 fun SearchBar(
 	query: String,
 	onQueryChange: (String) -> Unit,
-	searchResults: List<com.example.myapplication.domain.model.LocationInfo>,
-	onLocationSelected: (com.example.myapplication.domain.model.LocationInfo) -> Unit,
 	isSearching: Boolean
 ) {
-	Column(modifier = Modifier.fillMaxWidth()) {
-		Box(
-			modifier = Modifier
-				.fillMaxWidth()
-				.clip(RoundedCornerShape(24.dp))
-				.background(Color.White.copy(alpha = 0.12f))
-				.border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
-		) {
-			Column {
-				TextField(
-					value = query,
-					onValueChange = onQueryChange,
-					modifier = Modifier.fillMaxWidth(),
-					placeholder = { Text("Search city...", color = Color.White.copy(alpha = 0.5f)) },
-					leadingIcon = {
-						Icon(
-							Icons.Default.Search,
-							contentDescription = null,
-							tint = Color.White
-						)
-					},
-					trailingIcon = {
-						if (query.isNotEmpty()) {
-							IconButton(onClick = { onQueryChange("") }) {
-								Icon(Icons.Default.Close, contentDescription = null, tint = Color.White)
-							}
+	Surface(
+		modifier = Modifier
+			.fillMaxWidth()
+			.zIndex(50f),
+		color = Color.White.copy(alpha = 0.2f),
+		shape = RoundedCornerShape(24.dp),
+		border = BorderStroke(
+			1.dp,
+			Brush.linearGradient(listOf(Color.White.copy(alpha = 0.5f), Color.White.copy(alpha = 0.1f)))
+		)
+	) {
+		Column {
+			TextField(
+				value = query,
+				onValueChange = {
+					Log.d("WeatherScreen", "Search input: $it")
+					onQueryChange(it)
+				},
+				modifier = Modifier.fillMaxWidth(),
+				placeholder = { Text("Search city...", color = Color.White.copy(alpha = 0.7f)) },
+				leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.White) },
+				trailingIcon = {
+					if (query.isNotEmpty()) {
+						IconButton(onClick = { onQueryChange("") }) {
+							Icon(Icons.Default.Close, contentDescription = null, tint = Color.White)
 						}
-					},
-					colors = TextFieldDefaults.colors(
-						focusedContainerColor = Color.Transparent,
-						unfocusedContainerColor = Color.Transparent,
-						cursorColor = Color.White,
-						focusedIndicatorColor = Color.Transparent,
-						unfocusedIndicatorColor = Color.Transparent,
-						focusedTextColor = Color.White,
-						unfocusedTextColor = Color.White
-					),
-					singleLine = true
-				)
-				if (isSearching) {
-					LinearProgressIndicator(
-						modifier = Modifier
-							.fillMaxWidth()
-							.height(2.dp),
-						color = Color.White,
-						trackColor = Color.Transparent
-					)
-				}
-			}
-		}
-
-		AnimatedVisibility(
-			visible = searchResults.isNotEmpty(),
-			enter = expandVertically() + fadeIn(),
-			exit = shrinkVertically() + fadeOut()
-		) {
-			Card(
-				modifier = Modifier
-					.fillMaxWidth()
-					.padding(top = 8.dp)
-					.border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp)),
-				colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.4f)),
-				shape = RoundedCornerShape(24.dp)
-			) {
-				LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
-					items(searchResults) { location ->
-						ListItem(
-							headlineContent = {
-								Text(
-									location.name,
-									color = Color.White,
-									fontWeight = FontWeight.SemiBold
-								)
-							},
-							supportingContent = {
-								Text(
-									"${location.region ?: ""}${if (location.region != null) ", " else ""}${location.country ?: ""}",
-									color = Color.White.copy(alpha = 0.6f),
-									fontSize = 12.sp
-								)
-							},
-							modifier = Modifier
-								.clickable { onLocationSelected(location) }
-								.background(Color.Transparent),
-							colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-						)
-						HorizontalDivider(
-							modifier = Modifier.padding(horizontal = 16.dp),
-							color = Color.White.copy(alpha = 0.1f)
-						)
 					}
-				}
+				},
+				colors = TextFieldDefaults.colors(
+					focusedContainerColor = Color.Transparent,
+					unfocusedContainerColor = Color.Transparent,
+					cursorColor = Color.White,
+					focusedIndicatorColor = Color.Transparent,
+					unfocusedIndicatorColor = Color.Transparent,
+					focusedTextColor = Color.White,
+					unfocusedTextColor = Color.White
+				),
+				singleLine = true
+			)
+			if (isSearching) {
+				LinearProgressIndicator(
+					modifier = Modifier
+						.fillMaxWidth()
+						.height(2.dp),
+					color = Color.White,
+					trackColor = Color.Transparent
+				)
 			}
 		}
 	}
@@ -311,68 +437,102 @@ fun WeatherContent(
 	locationName: String,
 	weatherInfo: WeatherInfo
 ) {
+	var visible by remember { mutableStateOf(false) }
+	LaunchedEffect(weatherInfo) {
+		visible = false
+		delay(100.milliseconds)
+		visible = true
+	}
+
 	Column(
-		modifier = Modifier.fillMaxWidth(),
+		modifier = Modifier.fillMaxSize(),
 		horizontalAlignment = Alignment.CenterHorizontally
 	) {
-		Text(
-			text = locationName,
-			fontSize = 28.sp,
-			fontWeight = FontWeight.Medium,
-			color = Color.White,
-			textAlign = TextAlign.Center
-		)
+		Spacer(modifier = Modifier.height(20.dp))
 
-		Spacer(modifier = Modifier.height(16.dp))
+		AnimatedVisibility(visible = visible, enter = slideInVertically { -40 } + fadeIn(tween(600))) {
+			Text(
+				text = locationName,
+				fontSize = 32.sp,
+				fontWeight = FontWeight.Bold,
+				color = Color.White,
+				textAlign = TextAlign.Center
+			)
+		}
 
-		val infiniteTransition = rememberInfiniteTransition(label = "IconPulse")
+		Spacer(modifier = Modifier.height(20.dp))
+
+		val infiniteTransition = rememberInfiniteTransition(label = "MainIconPulse")
 		val scale by infiniteTransition.animateFloat(
 			initialValue = 1f,
-			targetValue = 1.05f,
+			targetValue = 1.08f,
 			animationSpec = infiniteRepeatable(
-				animation = tween(2000, easing = EaseInOutSine),
+				animation = tween(2500, easing = EaseInOutSine),
 				repeatMode = RepeatMode.Reverse
 			),
-			label = "ScaleAnimation"
+			label = "IconScale"
 		)
 
-		Icon(
-			imageVector = getWeatherIcon(weatherInfo.condition),
-			contentDescription = null,
-			tint = Color.White,
-			modifier = Modifier
-				.size(160.dp)
-				.graphicsLayer(scaleX = scale, scaleY = scale)
-		)
+		AnimatedVisibility(visible = visible, enter = scaleIn(tween(800)) + fadeIn(tween(800))) {
+			Icon(
+				imageVector = getWeatherIcon(weatherInfo.condition),
+				contentDescription = null,
+				tint = Color.White,
+				modifier = Modifier
+					.size(160.dp)
+					.graphicsLayer(scaleX = scale, scaleY = scale)
+			)
+		}
 
-		Text(
-			text = "${weatherInfo.temperature.toInt()}°",
-			fontSize = 110.sp,
-			fontWeight = FontWeight.Thin,
-			color = Color.White
-		)
+		AnimatedVisibility(visible = visible, enter = fadeIn(tween(1000, 400))) {
+			Column(horizontalAlignment = Alignment.CenterHorizontally) {
+				Text(
+					text = "${weatherInfo.temperature.toInt()}°",
+					fontSize = 120.sp,
+					fontWeight = FontWeight.ExtraLight,
+					color = Color.White
+				)
+				Text(
+					text = weatherInfo.condition,
+					fontSize = 24.sp,
+					fontWeight = FontWeight.Light,
+					color = Color.White.copy(alpha = 0.9f)
+				)
+			}
+		}
 
-		Text(
-			text = weatherInfo.condition,
-			fontSize = 22.sp,
-			fontWeight = FontWeight.Light,
-			color = Color.White.copy(alpha = 0.9f)
-		)
+		Spacer(modifier = Modifier.weight(1f))
 
-		Spacer(modifier = Modifier.height(32.dp))
-
-		Row(
-			modifier = Modifier
-				.fillMaxWidth()
-				.clip(RoundedCornerShape(32.dp))
-				.background(Color.White.copy(alpha = 0.08f))
-				.border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(32.dp))
-				.padding(vertical = 24.dp),
-			horizontalArrangement = Arrangement.SpaceEvenly
-		) {
-			WeatherDetailItem(Icons.Default.Thermostat, "${weatherInfo.feelsLike.toInt()}°", "Feels Like")
-			WeatherDetailItem(Icons.Default.WaterDrop, "${weatherInfo.humidity}%", "Humidity")
-			WeatherDetailItem(Icons.Default.Air, "${weatherInfo.windSpeed} km/h", "Wind")
+		AnimatedVisibility(
+			visible = visible,
+			enter = slideInVertically { 100 } + fadeIn(tween(800, 600))) {
+			Row(
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(bottom = 40.dp)
+					.clip(RoundedCornerShape(32.dp))
+					.background(Color.White.copy(alpha = 0.12f))
+					.border(
+						width = 1.dp,
+						brush = Brush.verticalGradient(
+							listOf(
+								Color.White.copy(alpha = 0.3f),
+								Color.Transparent
+							)
+						),
+						shape = RoundedCornerShape(32.dp)
+					)
+					.padding(vertical = 28.dp),
+				horizontalArrangement = Arrangement.SpaceEvenly
+			) {
+				WeatherDetailItem(
+					Icons.Default.Thermostat,
+					"${weatherInfo.feelsLike.toInt()}°",
+					"Feels Like"
+				)
+				WeatherDetailItem(Icons.Default.WaterDrop, "${weatherInfo.humidity}%", "Humidity")
+				WeatherDetailItem(Icons.Default.Air, "${weatherInfo.windSpeed} km/h", "Wind")
+			}
 		}
 	}
 }
@@ -380,10 +540,10 @@ fun WeatherContent(
 @Composable
 fun WeatherDetailItem(icon: ImageVector, value: String, label: String) {
 	Column(horizontalAlignment = Alignment.CenterHorizontally) {
-		Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+		Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
 		Spacer(modifier = Modifier.height(8.dp))
-		Text(text = value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-		Text(text = label, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+		Text(text = value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+		Text(text = label, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
 	}
 }
 
@@ -398,20 +558,20 @@ fun ErrorLayout(error: String, onRetry: () -> Unit) {
 			Icons.Default.CloudOff,
 			contentDescription = null,
 			tint = Color.White,
-			modifier = Modifier.size(80.dp)
+			modifier = Modifier.size(90.dp)
 		)
-		Spacer(modifier = Modifier.height(16.dp))
+		Spacer(modifier = Modifier.height(20.dp))
 		Text(
 			text = error,
 			color = Color.White,
 			textAlign = TextAlign.Center,
-			modifier = Modifier.padding(horizontal = 32.dp)
+			modifier = Modifier.padding(horizontal = 40.dp)
 		)
-		Spacer(modifier = Modifier.height(24.dp))
+		Spacer(modifier = Modifier.height(30.dp))
 		Button(
 			onClick = onRetry,
-			colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
-			shape = RoundedCornerShape(16.dp)
+			colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.25f)),
+			shape = RoundedCornerShape(20.dp)
 		) {
 			Text("Retry", color = Color.White)
 		}
@@ -420,12 +580,20 @@ fun ErrorLayout(error: String, onRetry: () -> Unit) {
 
 fun getWeatherIcon(condition: String): ImageVector {
 	return when {
-		condition.contains("Clear", ignoreCase = true) -> Icons.Default.WbSunny
-		condition.contains("Partly", ignoreCase = true) -> Icons.Default.CloudQueue
-		condition.contains("Cloud", ignoreCase = true) -> Icons.Default.Cloud
-		condition.contains("Rain", ignoreCase = true) -> Icons.Default.Thunderstorm
+		condition.contains("Thunderstorm", ignoreCase = true) -> Icons.Default.Thunderstorm
+		condition.contains("Rain", ignoreCase = true) || condition.contains(
+			"Drizzle",
+			ignoreCase = true
+		) -> Icons.Default.Thunderstorm
+
 		condition.contains("Snow", ignoreCase = true) -> Icons.Default.AcUnit
 		condition.contains("Fog", ignoreCase = true) -> Icons.Default.Cloud
+		condition.contains("Clear Sky", ignoreCase = true) -> Icons.Default.WbSunny
+		condition.contains("Mainly Clear", ignoreCase = true) || condition.contains(
+			"Cloud",
+			ignoreCase = true
+		) -> Icons.Default.CloudQueue
+
 		else -> Icons.Default.WbCloudy
 	}
 }

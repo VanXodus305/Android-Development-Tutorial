@@ -1,6 +1,9 @@
 package com.example.myapplication.data.repository
 
+import android.annotation.SuppressLint
+import android.util.Log
 import com.example.myapplication.data.api.GeocodingApi
+import com.example.myapplication.data.api.PexelsApi
 import com.example.myapplication.data.api.WeatherApi
 import com.example.myapplication.domain.model.LocationInfo
 import com.example.myapplication.domain.model.WeatherInfo
@@ -42,6 +45,15 @@ class WeatherRepositoryImpl : WeatherRepository {
 		.build()
 		.create(GeocodingApi::class.java)
 
+	private val pexelsApi = Retrofit.Builder()
+		.baseUrl(PexelsApi.BASE_URL)
+		.client(okHttpClient)
+		.addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+		.build()
+		.create(PexelsApi::class.java)
+
+	private val pexelsApiKey = "9uFab6m17YJ2fINGNDUKqMueSFdBllCVklHPy8L8xM0VflFSWy4XJgd7"
+
 	override suspend fun fetchWeather(lat: Double, lon: Double): Resource<WeatherInfo> {
 		return try {
 			val response = weatherApi.getWeatherData(lat, lon)
@@ -69,11 +81,13 @@ class WeatherRepositoryImpl : WeatherRepository {
 	}
 
 	override suspend fun searchLocation(query: String): Resource<List<LocationInfo>> {
+		Log.d("WeatherRepo", "Searching for: $query")
 		return try {
 			val response = geocodingApi.searchLocation(query)
 			val body = response.body()
 
 			if (response.isSuccessful && body != null) {
+				Log.d("WeatherRepo", "Search successful: ${body.results?.size ?: 0} results")
 				Resource.Success(
 					body.results?.map {
 						LocationInfo(
@@ -86,19 +100,56 @@ class WeatherRepositoryImpl : WeatherRepository {
 					} ?: emptyList()
 				)
 			} else {
+				Log.e("WeatherRepo", "Search error: ${response.code()} ${response.errorBody()?.string()}")
 				Resource.Error("Search error: ${response.code()}")
 			}
 		} catch (e: Exception) {
+			Log.e("WeatherRepo", "Search failed: ${e.localizedMessage}")
 			Resource.Error("Search failed: ${e.localizedMessage}")
+		}
+	}
+
+	override suspend fun fetchBackgroundVideo(condition: String): Resource<String> {
+		return try {
+			val query = when {
+				condition.contains("Thunder", ignoreCase = true) -> "thunderstorm sky"
+				condition.contains("Rain", ignoreCase = true) -> "rainy day"
+				condition.contains("Drizzle", ignoreCase = true) -> "light rain"
+				condition.contains("Snow", ignoreCase = true) -> "snowy forest"
+				condition.contains("Fog", ignoreCase = true) -> "foggy morning"
+				condition.contains("Cloud", ignoreCase = true) -> "cloudy sky"
+				condition.contains("Clear", ignoreCase = true) -> "sunny nature"
+				else -> "blue sky"
+			}
+
+			val response = pexelsApi.searchVideos(pexelsApiKey, query)
+			val body = response.body()
+
+			if (response.isSuccessful && body != null && body.videos.isNotEmpty()) {
+				val videoFile = body.videos[0].videoFiles.find { it.quality == "sd" || it.quality == "hd" }
+					?: body.videos[0].videoFiles[0]
+				Resource.Success(videoFile.link)
+			} else {
+				Resource.Error("Video not found")
+			}
+		} catch (e: Exception) {
+			Resource.Error("Video fetch failed: ${e.localizedMessage}")
 		}
 	}
 
 	private fun createUnsafeOkHttpClient(): OkHttpClient {
 		return try {
 			val trustAllCerts = arrayOf<TrustManager>(
+				@SuppressLint("CustomX509TrustManager")
 				object : X509TrustManager {
-					override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-					override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+					@SuppressLint("TrustAllX509TrustManager")
+					override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
+					}
+
+					@SuppressLint("TrustAllX509TrustManager")
+					override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+					}
+
 					override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
 				}
 			)
@@ -121,13 +172,20 @@ class WeatherRepositoryImpl : WeatherRepository {
 	private fun mapWeatherCode(code: Int): String {
 		return when (code) {
 			0 -> "Clear Sky"
-			1, 2, 3 -> "Partly Cloudy"
+			1 -> "Mainly Clear"
+			2 -> "Partly Cloudy"
+			3 -> "Overcast"
 			45, 48 -> "Foggy"
 			51, 53, 55 -> "Drizzle"
+			56, 57 -> "Freezing Drizzle"
 			61, 63, 65 -> "Rainy"
+			66, 67 -> "Freezing Rain"
 			71, 73, 75 -> "Snowy"
+			77 -> "Snow Grains"
 			80, 81, 82 -> "Rain Showers"
-			95, 96, 99 -> "Thunderstorm"
+			85, 86 -> "Snow Showers"
+			95 -> "Thunderstorm"
+			96, 99 -> "Thunderstorm with Hail"
 			else -> "Unknown Weather"
 		}
 	}
