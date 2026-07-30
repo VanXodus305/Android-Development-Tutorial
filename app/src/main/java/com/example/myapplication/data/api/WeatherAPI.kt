@@ -10,7 +10,8 @@ interface WeatherApi {
 	suspend fun getWeatherData(
 		@Query("latitude") lat: Double,
 		@Query("longitude") lon: Double,
-		@Query("current") currentVariables: String = "temperature_2m,wind_speed_10m,weather_code,relative_humidity_2m,apparent_temperature,is_day"
+		@Query("current") currentVariables: String = "temperature_2m,wind_speed_10m,weather_code,relative_humidity_2m,apparent_temperature,is_day",
+		@Query("timezone") timezone: String = "auto"
 	): Response<WeatherDto>
 
 	companion object {

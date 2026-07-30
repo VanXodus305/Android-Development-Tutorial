@@ -15,5 +15,6 @@ data class CurrentWeatherDto(
 	@SerialName("weather_code") val weatherCode: Int,
 	@SerialName("relative_humidity_2m") val humidity: Int,
 	@SerialName("apparent_temperature") val feelsLike: Double,
-	@SerialName("is_day") val isDay: Int
+	@SerialName("is_day") val isDay: Int,
+	@SerialName("time") val time: String
 )

@@ -6,5 +6,6 @@ data class WeatherInfo(
 	val condition: String,
 	val humidity: Int,
 	val feelsLike: Double,
-	val isDay: Boolean
+	val isDay: Boolean,
+	val timeOfDay: String
 )

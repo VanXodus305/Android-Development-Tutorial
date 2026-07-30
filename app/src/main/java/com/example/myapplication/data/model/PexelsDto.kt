@@ -16,7 +16,7 @@ data class PexelsVideoDto(
 @Serializable
 data class PexelsVideoFileDto(
 	@SerialName("link") val link: String,
-	@SerialName("quality") val quality: String,
+	@SerialName("quality") val quality: String? = null,
 	@SerialName("width") val width: Int? = null,
 	@SerialName("height") val height: Int? = null
 )

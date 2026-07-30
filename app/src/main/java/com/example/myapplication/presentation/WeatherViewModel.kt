@@ -84,7 +84,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 	}
 
 	private fun fetchWeather(lat: Double, lon: Double, name: String) {
-		_state.value = _state.value.copy(isLoading = true, error = null)
+		_state.value = _state.value.copy(isLoading = true, error = null, backgroundVideoUrl = null)
 		viewModelScope.launch {
 			when (val result = repository.fetchWeather(lat, lon)) {
 				is Resource.Success -> {
@@ -93,7 +93,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 						isLoading = false,
 						locationName = name
 					)
-					fetchBackgroundVideo(result.data.condition)
+					fetchBackgroundVideo(result.data.condition, result.data.timeOfDay)
 				}
 
 				is Resource.Error -> {
@@ -106,9 +106,9 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 		}
 	}
 
-	private fun fetchBackgroundVideo(condition: String) {
+	private fun fetchBackgroundVideo(condition: String, timeOfDay: String) {
 		viewModelScope.launch {
-			when (val result = repository.fetchBackgroundVideo(condition)) {
+			when (val result = repository.fetchBackgroundVideo(condition, timeOfDay)) {
 				is Resource.Success -> {
 					_state.value = _state.value.copy(backgroundVideoUrl = result.data)
 				}

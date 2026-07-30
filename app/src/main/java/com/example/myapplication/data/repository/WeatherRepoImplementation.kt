@@ -29,6 +29,8 @@ class WeatherRepositoryImpl : WeatherRepository {
 
 	private val json = Json {
 		ignoreUnknownKeys = true
+		coerceInputValues = true
+		explicitNulls = false
 	}
 
 	private val weatherApi = Retrofit.Builder()
@@ -67,7 +69,8 @@ class WeatherRepositoryImpl : WeatherRepository {
 						condition = mapWeatherCode(body.current.weatherCode),
 						humidity = body.current.humidity,
 						feelsLike = body.current.feelsLike,
-						isDay = body.current.isDay == 1
+						isDay = body.current.isDay == 1,
+						timeOfDay = getTimeOfDaySegment(body.current.time)
 					)
 				)
 			} else {
@@ -109,17 +112,38 @@ class WeatherRepositoryImpl : WeatherRepository {
 		}
 	}
 
-	override suspend fun fetchBackgroundVideo(condition: String): Resource<String> {
+	override suspend fun fetchBackgroundVideo(
+		condition: String,
+		timeOfDay: String
+	): Resource<String> {
 		return try {
 			val query = when {
-				condition.contains("Thunder", ignoreCase = true) -> "thunderstorm sky"
-				condition.contains("Rain", ignoreCase = true) -> "rainy day"
-				condition.contains("Drizzle", ignoreCase = true) -> "light rain"
-				condition.contains("Snow", ignoreCase = true) -> "snowy forest"
-				condition.contains("Fog", ignoreCase = true) -> "foggy morning"
-				condition.contains("Cloud", ignoreCase = true) -> "cloudy sky"
-				condition.contains("Clear", ignoreCase = true) -> "sunny nature"
-				else -> "blue sky"
+				condition.contains(
+					"Thunder",
+					ignoreCase = true
+				) -> "dramatic lightning thunderstorm $timeOfDay"
+
+				condition.contains(
+					"Heavy Rain",
+					ignoreCase = true
+				) -> "heavy cinematic rain storm $timeOfDay"
+
+				condition.contains("Rain Showers", ignoreCase = true) -> "light rain nature $timeOfDay"
+				condition.contains("Rain", ignoreCase = true) -> "rainy $timeOfDay atmosphere"
+				condition.contains("Drizzle", ignoreCase = true) -> "gentle mist rain $timeOfDay"
+				condition.contains("Snow", ignoreCase = true) -> "beautiful snow fall $timeOfDay"
+				condition.contains("Fog", ignoreCase = true) -> "moody foggy forest $timeOfDay"
+				condition.contains("Overcast", ignoreCase = true) -> "dark overcast moody clouds $timeOfDay"
+				condition.contains(
+					"Partly Sunny",
+					ignoreCase = true
+				) -> "sun rays through clouds $timeOfDay"
+
+				condition.contains("Partly Cloudy", ignoreCase = true) -> "blue sky white clouds $timeOfDay"
+				condition.contains("Mainly Clear", ignoreCase = true) -> "clear sunny $timeOfDay nature"
+				condition.contains("Sunny", ignoreCase = true) -> "bright sun $timeOfDay"
+				condition.contains("Clear Sky", ignoreCase = true) -> "cinematic clear sky $timeOfDay"
+				else -> "scenic nature landscape $timeOfDay"
 			}
 
 			val response = pexelsApi.searchVideos(pexelsApiKey, query)
@@ -134,6 +158,25 @@ class WeatherRepositoryImpl : WeatherRepository {
 			}
 		} catch (e: Exception) {
 			Resource.Error("Video fetch failed: ${e.localizedMessage}")
+		}
+	}
+
+	private fun getTimeOfDaySegment(time: String): String {
+		// Open-Meteo time format is "2023-07-29T15:00"
+		return try {
+			val hour = time.substringAfter('T').substringBefore(':').toInt()
+			when (hour) {
+				in 4..5 -> "dawn"
+				in 6..10 -> "morning"
+				in 11..13 -> "noon"
+				in 14..16 -> "afternoon"
+				in 17..18 -> "evening"
+				in 19..20 -> "dusk"
+				else -> "night"
+			}
+		} catch (e: Exception) {
+			e.printStackTrace()
+			"day"
 		}
 	}
 
@@ -171,20 +214,23 @@ class WeatherRepositoryImpl : WeatherRepository {
 
 	private fun mapWeatherCode(code: Int): String {
 		return when (code) {
-			0 -> "Clear Sky"
+			0 -> "Sunny"
 			1 -> "Mainly Clear"
-			2 -> "Partly Cloudy"
+			2 -> "Partly Sunny"
 			3 -> "Overcast"
 			45, 48 -> "Foggy"
 			51, 53, 55 -> "Drizzle"
 			56, 57 -> "Freezing Drizzle"
-			61, 63, 65 -> "Rainy"
+			61, 63 -> "Rainy"
+			65 -> "Heavy Rain"
 			66, 67 -> "Freezing Rain"
-			71, 73, 75 -> "Snowy"
+			71, 73 -> "Snowy"
+			75 -> "Heavy Snow"
 			77 -> "Snow Grains"
-			80, 81, 82 -> "Rain Showers"
+			80, 81 -> "Rain Showers"
+			82 -> "Violent Rain Showers"
 			85, 86 -> "Snow Showers"
-			95 -> "Thunderstorm"
+			95 -> "Scattered Thunderstorms"
 			96, 99 -> "Thunderstorm with Hail"
 			else -> "Unknown Weather"
 		}

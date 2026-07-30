@@ -22,6 +22,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,9 +41,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Thunderstorm
@@ -74,7 +75,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -122,21 +122,21 @@ fun WeatherScreen(viewModel: WeatherViewModel) {
 			videoUrl = state.backgroundVideoUrl
 		)
 
+		// Dim layer when searching (Doesn't affect the search bar itself)
+		val isSearchingActive = state.searchResults.isNotEmpty() || state.isSearching
+		val contentAlpha by animateFloatAsState(
+			targetValue = if (isSearchingActive) 0.3f else 1f,
+			animationSpec = tween(600), label = "ContentDim"
+		)
+
 		Column(
 			modifier = Modifier
 				.fillMaxSize()
+				.graphicsLayer(alpha = contentAlpha)
 				.padding(horizontal = 20.dp),
 			horizontalAlignment = Alignment.CenterHorizontally
 		) {
-			Spacer(modifier = Modifier.height(56.dp))
-
-			SearchBar(
-				query = state.searchQuery,
-				onQueryChange = viewModel::onSearchQueryChange,
-				isSearching = state.isSearching
-			)
-
-			Spacer(modifier = Modifier.height(24.dp))
+			Spacer(modifier = Modifier.height(140.dp)) // Below search bar
 
 			AnimatedContent(
 				targetState = state,
@@ -170,25 +170,46 @@ fun WeatherScreen(viewModel: WeatherViewModel) {
 			}
 		}
 
-		// Floating Search Results Dropdown (Improved Visibility and Interaction)
-		if (state.searchResults.isNotEmpty() || state.isSearching) {
+		// Top Search Bar (ALWAYS BRIGHT AND ON TOP)
+		Box(
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(top = 56.dp)
+				.padding(horizontal = 20.dp)
+				.zIndex(100f) // Very high to stay above results dim
+		) {
+			SearchBar(
+				query = state.searchQuery,
+				onQueryChange = viewModel::onSearchQueryChange,
+				isSearching = state.isSearching
+			)
+		}
+
+		// Floating Search Results Dropdown
+		if (isSearchingActive) {
 			Box(
 				modifier = Modifier
 					.fillMaxSize()
-					.background(Color.Black.copy(alpha = 0.4f))
-					.clickable { viewModel.onSearchQueryChange("") } // Click background to close
-					.zIndex(100f) // Extremely high zIndex
+					.background(Color.Black.copy(alpha = 0.2f)) // Subtler dim for search bar focus
+					.clickable(
+						interactionSource = remember { MutableInteractionSource() },
+						indication = null
+					) { viewModel.onSearchQueryChange("") }
+					.zIndex(50f)
 			) {
 				Card(
 					modifier = Modifier
 						.fillMaxWidth()
-						.padding(top = 120.dp)
+						.padding(top = 135.dp) // Just below search bar
 						.padding(horizontal = 20.dp)
-						.clickable(enabled = false) { } // Consume clicks inside
-						.border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(24.dp)),
-					colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+						.clickable(enabled = false) { }
+						.border(
+							BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f)),
+							RoundedCornerShape(24.dp)
+						),
+					colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E).copy(alpha = 0.96f)),
 					shape = RoundedCornerShape(24.dp),
-					elevation = CardDefaults.cardElevation(16.dp)
+					elevation = CardDefaults.cardElevation(20.dp)
 				) {
 					if (state.isSearching && state.searchResults.isEmpty()) {
 						Box(
@@ -197,7 +218,7 @@ fun WeatherScreen(viewModel: WeatherViewModel) {
 								.padding(40.dp),
 							contentAlignment = Alignment.Center
 						) {
-							CircularProgressIndicator(color = Color.White)
+							CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
 						}
 					} else {
 						LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
@@ -207,7 +228,7 @@ fun WeatherScreen(viewModel: WeatherViewModel) {
 										Text(
 											location.name,
 											color = Color.White,
-											fontWeight = FontWeight.ExtraBold
+											fontWeight = FontWeight.Bold
 										)
 									},
 									supportingContent = {
@@ -218,7 +239,6 @@ fun WeatherScreen(viewModel: WeatherViewModel) {
 										)
 									},
 									modifier = Modifier.clickable {
-										Log.d("WeatherScreen", "Selected location: ${location.name}")
 										viewModel.onLocationSelected(location)
 									},
 									colors = ListItemDefaults.colors(containerColor = Color.Transparent)
@@ -239,8 +259,6 @@ fun WeatherScreen(viewModel: WeatherViewModel) {
 @UnstableApi
 @Composable
 fun DynamicWeatherBackground(isDay: Boolean, videoUrl: String?) {
-	val currentVideoUrl = remember(videoUrl) { videoUrl }
-
 	Box(modifier = Modifier.fillMaxSize()) {
 		// High-Quality Vibrant Fallback Gradient
 		Box(
@@ -254,12 +272,21 @@ fun DynamicWeatherBackground(isDay: Boolean, videoUrl: String?) {
 				)
 		)
 
-		if (currentVideoUrl != null) {
-			VideoBackground(videoUrl = currentVideoUrl)
+		AnimatedContent(
+			targetState = videoUrl,
+			transitionSpec = {
+				fadeIn(animationSpec = tween(1500)) togetherWith fadeOut(animationSpec = tween(1000))
+			},
+			label = "VideoTransition"
+		) { url ->
+			if (url != null) {
+				VideoBackground(videoUrl = url)
+			}
 		}
 
+		// Readability overlay
 		val overlayOpacity by animateFloatAsState(
-			targetValue = if (isDay) 0.15f else 0.35f,
+			targetValue = if (isDay) 0.2f else 0.4f,
 			animationSpec = tween(1500), label = "OverlayOpacity"
 		)
 		Box(
@@ -285,12 +312,11 @@ fun VideoBackground(videoUrl: String) {
 			playWhenReady = true
 			addListener(object : Player.Listener {
 				override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-					Log.e("VideoBackground", "ExoPlayer Error: ${error.message} (URL: $videoUrl)", error)
+					Log.e("VideoBackground", "ExoPlayer Error: ${error.message}", error)
 					isVideoReady = false
 				}
 
 				override fun onPlaybackStateChanged(state: Int) {
-					Log.d("VideoBackground", "ExoPlayer State: $state")
 					if (state == Player.STATE_READY) isVideoReady = true
 				}
 			})
@@ -381,23 +407,23 @@ fun SearchBar(
 	isSearching: Boolean
 ) {
 	Surface(
-		modifier = Modifier
-			.fillMaxWidth()
-			.zIndex(50f),
-		color = Color.White.copy(alpha = 0.2f),
+		modifier = Modifier.fillMaxWidth(),
+		color = Color.White.copy(alpha = 0.22f), // Apple glass translucency
 		shape = RoundedCornerShape(24.dp),
 		border = BorderStroke(
-			1.dp,
-			Brush.linearGradient(listOf(Color.White.copy(alpha = 0.5f), Color.White.copy(alpha = 0.1f)))
+			width = 0.5.dp, // Apple ultra-thin border
+			brush = Brush.verticalGradient(
+				listOf(
+					Color.White.copy(alpha = 0.6f),
+					Color.White.copy(alpha = 0.1f)
+				)
+			)
 		)
 	) {
 		Column {
 			TextField(
 				value = query,
-				onValueChange = {
-					Log.d("WeatherScreen", "Search input: $it")
-					onQueryChange(it)
-				},
+				onValueChange = onQueryChange,
 				modifier = Modifier.fillMaxWidth(),
 				placeholder = { Text("Search city...", color = Color.White.copy(alpha = 0.7f)) },
 				leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.White) },
@@ -475,7 +501,7 @@ fun WeatherContent(
 
 		AnimatedVisibility(visible = visible, enter = scaleIn(tween(800)) + fadeIn(tween(800))) {
 			Icon(
-				imageVector = getWeatherIcon(weatherInfo.condition),
+				imageVector = getWeatherIcon(weatherInfo.condition, weatherInfo.isDay),
 				contentDescription = null,
 				tint = Color.White,
 				modifier = Modifier
@@ -506,32 +532,29 @@ fun WeatherContent(
 		AnimatedVisibility(
 			visible = visible,
 			enter = slideInVertically { 100 } + fadeIn(tween(800, 600))) {
-			Row(
+			Surface(
 				modifier = Modifier
 					.fillMaxWidth()
-					.padding(bottom = 40.dp)
-					.clip(RoundedCornerShape(32.dp))
-					.background(Color.White.copy(alpha = 0.12f))
-					.border(
-						width = 1.dp,
-						brush = Brush.verticalGradient(
-							listOf(
-								Color.White.copy(alpha = 0.3f),
-								Color.Transparent
-							)
-						),
-						shape = RoundedCornerShape(32.dp)
-					)
-					.padding(vertical = 28.dp),
-				horizontalArrangement = Arrangement.SpaceEvenly
-			) {
-				WeatherDetailItem(
-					Icons.Default.Thermostat,
-					"${weatherInfo.feelsLike.toInt()}°",
-					"Feels Like"
+					.padding(bottom = 40.dp),
+				color = Color.White.copy(alpha = 0.18f),
+				shape = RoundedCornerShape(32.dp),
+				border = BorderStroke(
+					width = 0.5.dp,
+					brush = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.4f), Color.Transparent))
 				)
-				WeatherDetailItem(Icons.Default.WaterDrop, "${weatherInfo.humidity}%", "Humidity")
-				WeatherDetailItem(Icons.Default.Air, "${weatherInfo.windSpeed} km/h", "Wind")
+			) {
+				Row(
+					modifier = Modifier.padding(vertical = 32.dp),
+					horizontalArrangement = Arrangement.SpaceEvenly
+				) {
+					WeatherDetailItem(
+						Icons.Default.Thermostat,
+						"${weatherInfo.feelsLike.toInt()}°",
+						"Feels Like"
+					)
+					WeatherDetailItem(Icons.Default.WaterDrop, "${weatherInfo.humidity}%", "Humidity")
+					WeatherDetailItem(Icons.Default.Air, "${weatherInfo.windSpeed} km/h", "Wind")
+				}
 			}
 		}
 	}
@@ -578,22 +601,24 @@ fun ErrorLayout(error: String, onRetry: () -> Unit) {
 	}
 }
 
-fun getWeatherIcon(condition: String): ImageVector {
+fun getWeatherIcon(condition: String, isDay: Boolean): ImageVector {
 	return when {
-		condition.contains("Thunderstorm", ignoreCase = true) -> Icons.Default.Thunderstorm
-		condition.contains("Rain", ignoreCase = true) || condition.contains(
-			"Drizzle",
-			ignoreCase = true
-		) -> Icons.Default.Thunderstorm
-
+		condition.contains("Thunder", ignoreCase = true) -> Icons.Default.Thunderstorm
+		condition.contains("Heavy Rain", ignoreCase = true) -> Icons.Default.Thunderstorm
+		condition.contains("Rain", ignoreCase = true) -> Icons.Default.WaterDrop
+		condition.contains("Drizzle", ignoreCase = true) -> Icons.Default.WaterDrop
 		condition.contains("Snow", ignoreCase = true) -> Icons.Default.AcUnit
-		condition.contains("Fog", ignoreCase = true) -> Icons.Default.Cloud
-		condition.contains("Clear Sky", ignoreCase = true) -> Icons.Default.WbSunny
-		condition.contains("Mainly Clear", ignoreCase = true) || condition.contains(
-			"Cloud",
+		condition.contains("Fog", ignoreCase = true) -> Icons.Default.CloudQueue
+		condition.contains("Overcast", ignoreCase = true) -> Icons.Default.WbCloudy
+		condition.contains("Partly Sunny", ignoreCase = true) -> Icons.Default.WbCloudy
+		condition.contains("Partly Cloudy", ignoreCase = true) -> Icons.Default.CloudQueue
+		condition.contains("Sunny", ignoreCase = true) || condition.contains(
+			"Clear",
 			ignoreCase = true
-		) -> Icons.Default.CloudQueue
+		) || condition.contains("Mainly", ignoreCase = true) -> {
+			if (isDay) Icons.Default.WbSunny else Icons.Default.NightsStay
+		}
 
-		else -> Icons.Default.WbCloudy
+		else -> if (isDay) Icons.Default.WbSunny else Icons.Default.NightsStay
 	}
 }
