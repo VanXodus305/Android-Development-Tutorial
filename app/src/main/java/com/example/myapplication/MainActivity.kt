@@ -11,24 +11,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 
 class MainActivity : ComponentActivity() {
-
-//	private val db by lazy {
-//		Room.databaseBuilder(
-//			applicationContext,
-//			NotesDatabase::class.java,
-//			"notes.db"
-//		).build()
-//	}
-//	private val viewModel by viewModels<NotesViewModel>(
-//		factoryProducer = {
-//			object : ViewModelProvider.Factory {
-//				@Suppress("UNCHECKED_CAST")
-//				override fun <T : ViewModel> create(modelClass: Class<T>): T {
-//					return NotesViewModel(db.dao) as T
-//				}
-//			}
-//		}
-//	)
+	
 //	lateinit var settingsDataManager: SettingsManager
 
 	val viewModel: DownloadViewModel by viewModels()
@@ -50,8 +33,6 @@ class MainActivity : ComponentActivity() {
 //					ToDoAppScreen()
 //					val settings by settingsDataManager.getSettings().collectAsState(initial = null)
 //					SettingsInput(settingsDataManager, settings)
-//					val state by viewModel.state.collectAsState()
-//					NotesScreen(state = state, onEvent = viewModel::onEvent)
 					DownloadScreen(viewModel = viewModel)
 				}
 			}
@@ -66,7 +47,6 @@ class MainActivity : ComponentActivity() {
 ////		MyAppNavigation()
 ////		ToDoAppScreen()
 ////		DownloadScreen(viewModel = viewModel)
-//			WeatherScreen(viewModel = viewModel)
 //		}
 //	}
 }
